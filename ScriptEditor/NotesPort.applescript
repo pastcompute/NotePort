@@ -122,6 +122,19 @@ on processTheNextNote(noteName, folderName, numAttachments, theNote, theAccount,
 	on error
 		close access fp
 	end try
+	set outputFile to POSIX file (outputPath & "/" & escapedNoteName & ".html")
+	tell application "Notes"
+		local body
+		set body to (the body of theNote)
+		set fp to open for access outputFile with write permission
+		try
+			-- this can get sluggish, as it converts images to embedded JPEG data URLs
+			write body to fp as text
+			close access fp
+		on error
+			close access fp
+		end try
+	end tell
 end processTheNextNote
 
 
