@@ -3,11 +3,12 @@ use scripting additions
 local folderAlias
 local folderName
 
+-- Note - current behaviour is, existing files in existing destination directory are left untouched
+-- for best results, should prompt user to clear the destination
+
 set folderAlias to ¬
 	choose folder with prompt ¬
 		"Choose an empty folder to backup your notes to:" default location (path to home folder)
-
--- set folderName to quoted form of POSIX path of folderAlias
 
 global notesProcessedCount
 set notesProcessedCount to 0
@@ -69,19 +70,23 @@ on processTheNotesAccount(theAccount, theDestinationFolderPath)
 			set folderName to currentNoteFolder's name as text
 			set AppleScript's progress additional description to folderName
 			--log folderName
-			my processTheNotesFolder(theAccount, currentNoteFolder, theDestinationFolderPath)
+			my processTheNotesFolder(theAccount, currentNoteFolder, folderName, theDestinationFolderPath)
 			set n to n + 1
 		end repeat
 	end tell
 end processTheNotesAccount
 
-on processTheNotesFolder(theAccount, currentNoteFolder, theDestinationFolderPath)
+-- note, for performance we pass through already obtained fields
+-- this can probably be restructred to move the progress to different place to avoid this...
+
+on processTheNotesFolder(theAccount, currentNoteFolder, folderName, theDestinationFolderPath)
 	local outputPath
-	set outputPath to my createFolderInPathIfMissing(theDestinationFolderPath, the name of currentNoteFolder)
+	set outputPath to my createFolderInPathIfMissing(theDestinationFolderPath, folderName)
 	
 	tell application "Notes"
 		local noteCount
 		local n
+		local numAttachments
 		set noteCount to the count of currentNoteFolder's notes
 		set AppleScript's progress total steps to noteCount
 		set AppleScript's progress completed steps to 0
@@ -90,16 +95,33 @@ on processTheNotesFolder(theAccount, currentNoteFolder, theDestinationFolderPath
 		repeat with currentNote in currentNoteFolder's notes
 			local noteName
 			set noteName to currentNote's name as text
+			set numAttachments to count of attachments of currentNote
 			set AppleScript's progress additional description to noteName
 			--log noteName
-			my processTheNextNote(currentNote, missing value, missing value)
+			my processTheNextNote(noteName, folderName, numAttachments, currentNote, theAccount, outputPath)
 			set n to n + 1
 			set notesProcessedCount to notesProcessedCount + 1
 		end repeat
 	end tell
 end processTheNotesFolder
 
-on processTheNextNote(theNote, theAccount, currentNoteFolder)
+on processTheNextNote(noteName, folderName, numAttachments, theNote, theAccount, outputPath)
+	local outputFile
+	local escapedNoteName
+	local tresc
+	-- escape or replace slashes and quotes that might be in the note name, so we get a sane file
+	set tresc to quoted form of "[\":/']"
+	set escapedNoteName to (do shell script "echo " & (quoted form of noteName) & " | tr " & tresc & " _")
+	set outputFile to POSIX file (outputPath & "/" & escapedNoteName & ".info.txt")
+	set fp to open for access outputFile with write permission
+	try
+		write ("Folder=" & folderName & linefeed) to fp
+		write ("Name=" & noteName & linefeed) to fp
+		write ("AttachmentsCount=" & numAttachments & linefeed) to fp
+		close access fp
+	on error
+		close access fp
+	end try
 end processTheNextNote
 
 
