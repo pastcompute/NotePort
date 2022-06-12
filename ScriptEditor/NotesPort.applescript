@@ -15,8 +15,12 @@ local folderName
 set folderAlias to ¬
 	choose folder with prompt ¬
 		"Choose an empty folder to backup your notes to:" default location (path to home folder)
-
+global noteErrorCount
+global attachmentErrorCount
 global notesProcessedCount
+
+set noteErrorCount to 0
+set attachmentErrorCount to 0
 set notesProcessedCount to 0
 
 my processAllTheNotesAccounts(folderAlias)
@@ -29,6 +33,7 @@ on processAllTheNotesAccounts(topFolderAlias)
 		local notesAccountCount
 		local theNewFolderRef
 		local notesAccountDiskFolder
+		local testFilter
 		set n to 1
 		set notesAccountCount to the count of its accounts
 		set AppleScript's progress total steps to notesAccountCount
@@ -40,7 +45,12 @@ on processAllTheNotesAccounts(topFolderAlias)
 			-- display alert notesAccountName
 			-- log notesAccountName
 			
-			if notesAccountName = "On My Mac" then
+			set testFilter to true
+			if notesAccountName ≠ "On My Mac" then
+				set testFilter to false
+			end if
+			log testFilter
+			if testFilter is true then
 				set theNewFolderPath to my createFolderInAliasIfMissing(topFolderAlias, notesAccountName)
 				my processTheNotesAccount(notesAccount, theNewFolderPath)
 			end if
@@ -48,6 +58,12 @@ on processAllTheNotesAccounts(topFolderAlias)
 			set n to n + 1
 		end repeat
 	end tell
+	if attachmentErrorCount > 0 then
+		display alert ("" & attachmentErrorCount & " attachments had errors")
+	end if
+	if noteErrorCount > 0 then
+		display alert ("" & noteErrorCount & " notes had errors")
+	end if
 end processAllTheNotesAccounts
 
 on createFolderInAliasIfMissing(topFolderAlias, newFolderToCreate)
@@ -158,17 +174,23 @@ on processTheNextNote(noteName, folderName, theNote, theAccount, outputPath)
 			set attachPath to (escapedNoteName & "_" & theBasename & "_" & escdAttachmentName)
 			log attachPath
 			set attachFile to POSIX file (outputPath & "/" & attachPath)
+			log attachFile as string
+			do shell script "rm -f " & (quoted form of (POSIX path of attachFile))
 			write ("Attachment." & n & ".name=" & attachmentName & linefeed) to fp
 			write ("Attachment." & n & ".id=" & attachmentId & linefeed) to fp
 			write ("Attachment." & n & ".bn=" & theBasename & linefeed) to fp
 			write ("Attachment." & n & ".path=" & attachPath & linefeed) to fp
-			-- write the non-data URL for the moment?
-			-- note images can also be HEIC, so in due course we need to convert them to something renderable off of safari!
-			if text -4 through -1 of attachPath ≠ ".png" then
-				if text -5 through -1 of attachPath ≠ ".jpeg" then
-					save currentAttachment in file (attachFile as string)
-				end if
-			end if
+			-- TODO - perhaps we might skip PNG and JPEG?
+			-- this can fail if already exists... force delete (above) and wait for it to finish!
+			tell application "Notes"
+				try
+					save currentAttachment in file attachFile
+				on error
+					-- for some reason, we need this handler, even though there is no error
+					set attachmentErrorCount to attachmentErrorCount + 1
+					log "Failed to save attachment in " & attachFile
+				end try
+			end tell
 			set n to n + 1
 		end repeat
 		close access fp
@@ -177,6 +199,7 @@ on processTheNextNote(noteName, folderName, theNote, theAccount, outputPath)
 	end try
 	-- generate the actual core export
 	set outputFile to POSIX file (outputPath & "/" & escapedNoteName & ".html")
+	do shell script "rm -f " & (quoted form of (outputFile as string))
 	set fp to open for access outputFile with write permission
 	try
 		-- this can get sluggish, as it converts images to embedded JPEG and PNG data URLs
@@ -188,6 +211,7 @@ on processTheNextNote(noteName, folderName, theNote, theAccount, outputPath)
 		close access fp
 	on error
 		close access fp
+		set noteErrorCount to noteErrorCount + 1
 	end try
 	#	-- enumerate attachments, and save them out as well
 	#	-- ideally, we'd skip anything that is already a data URL though...
