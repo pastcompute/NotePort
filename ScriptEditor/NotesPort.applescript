@@ -16,7 +16,7 @@ my processAllTheNotesAccounts(folderAlias)
 
 return notesProcessedCount
 
-on processAllTheNotesAccounts(topFolderName)
+on processAllTheNotesAccounts(topFolderAlias)
 	tell application "Notes"
 		local n
 		local notesAccountCount
@@ -31,33 +31,31 @@ on processAllTheNotesAccounts(topFolderName)
 			set notesAccountName to (the name of the notesAccount as text)
 			set AppleScript's progress additional description to (notesAccountName)
 			-- display alert notesAccountName
-			--log notesAccountName
+			-- log notesAccountName
 			
-			set theNewFolderRef to my createFolderInFolderIfMissing(topFolderName, notesAccountName)
-			
-			my processTheNotesAccount(notesAccount, missing value) --, theNewFolder)
-			
+			set theNewFolderPath to my createFolderInAliasIfMissing(topFolderAlias, notesAccountName)
+			my processTheNotesAccount(notesAccount, theNewFolderPath)
 			set AppleScript's progress completed steps to n
 			set n to n + 1
 		end repeat
 	end tell
 end processAllTheNotesAccounts
 
-on createFolderInFolderIfMissing(topFolderName, newFolderToCreate)
-	local theNewFolder
-	tell application "Finder"
-		try
-			set theNewFolder to make new folder at topFolderName with properties {name:newFolderToCreate}
-		on error number ne
-			-- TODO - get a handle to the existing one instead...
-			-- TODO - allow user to choose behaviour before starting...
-			return missing value
-		end try
-	end tell
-	return theNewFolder
-end createFolderInFolderIfMissing
+on createFolderInAliasIfMissing(topFolderAlias, newFolderToCreate)
+	local theNewFolderPath
+	set theNewFolderPath to (POSIX path of topFolderAlias) & "/" & newFolderToCreate
+	do shell script "mkdir -p '" & theNewFolderPath & "'"
+	return theNewFolderPath
+end createFolderInAliasIfMissing
 
-on processTheNotesAccount(theAccount, theFolder)
+on createFolderInPathIfMissing(topFolderPath, newFolderToCreate)
+	local theNewFolderPath
+	set theNewFolderPath to topFolderPath & "/" & newFolderToCreate
+	do shell script "mkdir -p '" & theNewFolderPath & "'"
+	return theNewFolderPath
+end createFolderInPathIfMissing
+
+on processTheNotesAccount(theAccount, theDestinationFolderPath)
 	tell application "Notes"
 		local folderCount
 		local n
@@ -71,13 +69,16 @@ on processTheNotesAccount(theAccount, theFolder)
 			set folderName to currentNoteFolder's name as text
 			set AppleScript's progress additional description to folderName
 			--log folderName
-			my processTheNotesFolder(theAccount, currentNoteFolder)
+			my processTheNotesFolder(theAccount, currentNoteFolder, theDestinationFolderPath)
 			set n to n + 1
 		end repeat
 	end tell
 end processTheNotesAccount
 
-on processTheNotesFolder(theAccount, currentNoteFolder)
+on processTheNotesFolder(theAccount, currentNoteFolder, theDestinationFolderPath)
+	local outputPath
+	set outputPath to my createFolderInPathIfMissing(theDestinationFolderPath, the name of currentNoteFolder)
+	
 	tell application "Notes"
 		local noteCount
 		local n
@@ -91,10 +92,14 @@ on processTheNotesFolder(theAccount, currentNoteFolder)
 			set noteName to currentNote's name as text
 			set AppleScript's progress additional description to noteName
 			--log noteName
+			my processTheNextNote(currentNote, missing value, missing value)
 			set n to n + 1
 			set notesProcessedCount to notesProcessedCount + 1
 		end repeat
 	end tell
 end processTheNotesFolder
+
+on processTheNextNote(theNote, theAccount, currentNoteFolder)
+end processTheNextNote
 
 
