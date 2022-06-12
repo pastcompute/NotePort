@@ -47,9 +47,9 @@ on processAllTheNotesAccounts(topFolderAlias)
 			
 			set testFilter to true
 			if notesAccountName ≠ "On My Mac" then
-				set testFilter to false
+				-- set testFilter to false
 			end if
-			log testFilter
+			-- log testFilter
 			if testFilter is true then
 				set theNewFolderPath to my createFolderInAliasIfMissing(topFolderAlias, notesAccountName)
 				my processTheNotesAccount(notesAccount, theNewFolderPath)
@@ -172,9 +172,9 @@ on processTheNextNote(noteName, folderName, theNote, theAccount, outputPath)
 			set theBasename to theURL's lastPathComponent as text
 			set escdAttachmentName to my sanitiseFilename(attachmentName)
 			set attachPath to (escapedNoteName & "_" & theBasename & "_" & escdAttachmentName)
-			log attachPath
+			-- log attachPath
 			set attachFile to POSIX file (outputPath & "/" & attachPath)
-			log attachFile as string
+			-- log attachFile as string
 			do shell script "rm -f " & (quoted form of (POSIX path of attachFile))
 			write ("Attachment." & n & ".name=" & attachmentName & linefeed) to fp
 			write ("Attachment." & n & ".id=" & attachmentId & linefeed) to fp
@@ -231,4 +231,4 @@ on processTheNextNote(noteName, folderName, theNote, theAccount, outputPath)
 	#	end repeat
 end processTheNextNote
 
-
+-- TODO - write errors to a log file
