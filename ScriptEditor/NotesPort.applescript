@@ -115,6 +115,8 @@ end processTheNotesAccount
 on processTheNotesFolder(theAccount, currentNoteFolder, folderName, theDestinationFolderPath)
 	local outputPath
 	set outputPath to my createFolderInPathIfMissing(theDestinationFolderPath, folderName)
+	set logFile to POSIX path of POSIX file (outputPath & "/" & "log.txt")
+	do shell script "echo > " & quoted form of logFile
 	tell application "Notes"
 		local noteCount
 		local n
@@ -124,20 +126,21 @@ on processTheNotesFolder(theAccount, currentNoteFolder, folderName, theDestinati
 		set AppleScript's progress completed steps to 0
 		set AppleScript's progress description to "Enumerating notes"
 		set n to 1
+		-- TODO - deal with nested folders (work out what the parent of this is...)
 		repeat with currentNote in currentNoteFolder's notes
 			local noteName
 			set noteName to currentNote's name as text
 			set numAttachments to count of attachments of currentNote
 			set AppleScript's progress additional description to noteName
 			--log noteName
-			my processTheNextNote(noteName, folderName, currentNote, theAccount, outputPath)
+			my processTheNextNote(noteName, folderName, currentNote, theAccount, outputPath, logFile)
 			set n to n + 1
 			set notesProcessedCount to notesProcessedCount + 1
 		end repeat
 	end tell
 end processTheNotesFolder
 
-on processTheNextNote(noteName, folderName, theNote, theAccount, outputPath)
+on processTheNextNote(noteName, folderName, theNote, theAccount, outputPath, logFile)
 	local outputFile
 	local escapedNoteName
 	local theAttachments
@@ -153,6 +156,7 @@ on processTheNextNote(noteName, folderName, theNote, theAccount, outputPath)
 	
 	-- escape or replace slashes and quotes that might be in the note name, so we get a sane file
 	set escapedNoteName to my sanitiseFilename(noteName)
+	do shell script "echo 'Note: " & escapedNoteName & "' >> " & quoted form of logFile
 	set outputFile to POSIX file (outputPath & "/" & escapedNoteName & ".info.txt")
 	tell application "Notes"
 		set numAttachments to the count of theNote's attachments
@@ -184,11 +188,14 @@ on processTheNextNote(noteName, folderName, theNote, theAccount, outputPath)
 			-- this can fail if already exists... force delete (above) and wait for it to finish!
 			tell application "Notes"
 				try
+					-- OK, handwriting doesnt same (notably, it has no extension, but shows in data URI as png)
+					-- so lets try non-suffixed as PNG
+					-- TODO: - if attachFile has no file extension then try and save it as a PNG
 					save currentAttachment in file attachFile
 				on error
-					-- for some reason, we need this handler, even though there is no error
 					set attachmentErrorCount to attachmentErrorCount + 1
 					log "Failed to save attachment in " & attachFile
+					do shell script "echo 'Failed to save attachment in " & attachFile & "' >> " & quoted form of logFile
 				end try
 			end tell
 			set n to n + 1
@@ -212,6 +219,7 @@ on processTheNextNote(noteName, folderName, theNote, theAccount, outputPath)
 	on error
 		close access fp
 		set noteErrorCount to noteErrorCount + 1
+		do shell script "echo 'Failed to save note in " & outputFile & "' >> " & quoted form of logFile
 	end try
 	#	-- enumerate attachments, and save them out as well
 	#	-- ideally, we'd skip anything that is already a data URL though...
