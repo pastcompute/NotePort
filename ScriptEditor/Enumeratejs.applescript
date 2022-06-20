@@ -2,9 +2,13 @@
 // https://www.galvanist.com/posts/2020-03-28-jxa_notes/
 // https://brianlovin.com/hn/31579435
 // https://gist.github.com/JMichaelTX/d29adaa18088572ce6d4
+// https://developer.apple.com/library/mac/releasenotes/InterapplicationCommunication/RN-JavaScriptForAutomation/Articles/OSX10-10.html
+
 
 const currentApp = Application.currentApplication();
 currentApp.includeStandardAdditions = true;
+
+const desktopFolder = `${currentApp("desktop")}`;
 
 const globals = { }
 
@@ -36,15 +40,19 @@ function enumerateAccounts() {
 		const account = Notes.accounts[n]
 		const accountName = account.name()
 		console.log(`Account: ${accountName}`);
-		if (accountName === 'iCloud') continue
+		//if (accountName === 'iCloud') continue
 
+		Progress.description = 'Enumerating folders…'
 		const tree = enumerateFolders(account)
+		Progress.description = 'Enumerating notes…'
 		enumerateNotes(tree)
 		// console.log(JSON.stringify(tree, replacer, "  "))
 		
+		Progress.description = 'Exporting notes…'
+
 		recurseItems(tree, 0, (item, level) => {
 			// console.log(JSON.stringify(item.notes, replacer, "  "))
-			
+		
 			// Create destination folder if missing
 			currentApp.doShellScript(`mkdir -p '${item.path}'`)
 
@@ -54,13 +62,66 @@ function enumerateAccounts() {
 				//console.log(JSON.stringify(note, replacer, "  "))
 				const safeName = sanitisePath(note.name)
 				const safeValue = sanitiseValue(note.name)
-				const metaFile = item.path  + '/' + safeName + '.txt'
+				const metaFile = item.path  + '/' + safeName + '.info.txt'
+
+				Progress.additionalDescription = `Exporting ${note.name}…`
+
+				const created = note.aoNote.creationDate()
+				const updated = note.aoNote.modificationDate()
+				
+				const attachments = note.aoNote.attachments()
+				const numAttachments = attachments.length
+				
+				const encrypted = note.aoNote.passwordProtected()
+
 				currentApp.doShellScript(`echo 'id=${note.id}' > '${metaFile}'`)
 				currentApp.doShellScript(`echo 'parent=${note.parent.id}' >> '${metaFile}'`)
 				currentApp.doShellScript(`echo 'name=${safeValue}' >> '${metaFile}'`)
+				currentApp.doShellScript(`echo 'created=${created}' >> '${metaFile}'`)
+				currentApp.doShellScript(`echo 'updated=${updated}' >> '${metaFile}'`)
+				currentApp.doShellScript(`echo 'encrypted=${encrypted}' >> '${metaFile}'`)
+				currentApp.doShellScript(`echo 'attachments=${numAttachments}' >> '${metaFile}'`)
+
+				for (let v = 0; v < numAttachments; v++) {
+					const att = attachments[v]
+					const attachmentId = att.id()
+					const attachmentName = att.name()
+					const attachmentExt = attachmentName.split('.').reverse()[0]
+					const contentIdentifier = att.contentIdentifier()
+					const url = att.url()
+					// Convert to URL so we can get a name-id
+					// x-coredata://181F2744-C17D-41B1-B66D-AA72560FF0A2/ICAttachment/p1485
+					const attachmentCorePid = attachmentId.split('/').reverse()[0];
+					currentApp.doShellScript(`echo 'attachment.${v}.pid=${attachmentCorePid}' >> '${metaFile}'`)			
+					const attachmentFile = `${safeName}.${attachmentCorePid}.${attachmentExt}`
+					currentApp.doShellScript(`echo 'attachment.${v}.id=${attachmentId}' >> '${metaFile}'`)
+					currentApp.doShellScript(`echo 'attachment.${v}.cid=${contentIdentifier}' >> '${metaFile}'`)
+					currentApp.doShellScript(`echo 'attachment.${v}.url=${url}' >> '${metaFile}'`)
+					currentApp.doShellScript(`echo 'attachment.${v}.name=${attachmentName}' >> '${metaFile}'`)
+					currentApp.doShellScript(`echo 'attachment.${v}.file=${attachmentFile}' >> '${metaFile}'`)
+					const attachmentFilename = `${item.path}/${attachmentFile}`
+					
+					// TODO: convert HEIC to JPEG as well
+					// Notes.save(att, {in: Path(attachmentFilename)})
+				}
+
+				// TODO - handle UTF8 properly? https://bru6.de/jxa/automating-applications/notes/
+				const dataFile = `${item.path}/${safeName}.html`
+				dumpToFile(note.aoNote.body(), dataFile)
+
+				const textFile = `${item.path}/${safeName}.txt`
+				dumpToFile(note.aoNote.plaintext(), textFile)
 			}
 		}, true)
 	}
+}
+
+
+function dumpToFile(text, fileName) {
+	const f = currentApp.openForAccess(Path(fileName), { writePermission: true })
+    currentApp.setEof(f, { to: 0 })
+	currentApp.write(text, { to: f, startingAt: currentApp.getEof(f) })
+	currentApp.closeAccess(f)
 }
 
 // Helper function to escape things that will go in shell single quote strings, that are not filenames
@@ -164,6 +225,7 @@ function enumerateFolders(account) {
 		const folderName = folder.name()
 		const parent = folder.container
 		const parentId = parent.id()
+		Progress.additionalDescription = `Inspecting ${folderName}…`
 		return {
 			id: folderId,
 			parentId: parentId,			
@@ -190,8 +252,10 @@ function enumerateFolders(account) {
 }
 
 // Visit each folder in tree structure and gather notes as an Array on each tree item
+// TODO check for duplicates, so we can change the name to suit
 function enumerateNotes(tree) {	
 	const Notes = Application('Notes')
+	const nameIndex = {}
 	recurseItems(tree, 0, (item, level) => {
 		const myNotes = []
 		const theNotes = item.aoFolder.notes
@@ -200,6 +264,15 @@ function enumerateNotes(tree) {
 			const note = theNotes[n]
 			const noteId = note.id()
 			const noteName = note.name()
+			// Ensure no names are duplicated
+			const noteNameNext = "" + noteName
+			let x = 1
+			while (nameIndex.hasOwnProperty(noteNameNext)) {
+				noteNameNext = noteName + ` ${x}`
+				x = x + 1
+			}
+			Progress.additionalDescription = `Inspecting ${noteName}…`
+
 			myNotes.push({
 				id: noteId,
 				name: noteName,
