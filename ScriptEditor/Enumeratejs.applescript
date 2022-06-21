@@ -34,35 +34,45 @@ function replacer(k, v) {
 
 // Process all accounts connected, or apply a filter and only process some or one
 function enumerateAccounts() {
+	const now = new Date()
+	const logfile = globals.outputFolder.toString() +`/log-${sanitisePath(now.toTimeString())}.txt`
 	const Notes = Application('Notes')
 	const numAccounts = Notes.accounts.length
+	currentApp.doShellScript(`echo 'Processing now=${sanitiseValue(now.toTimeString())}' > '${logfile}'`)
 	for (let n=0; n < numAccounts; n++) {
 		const account = Notes.accounts[n]
 		const accountName = account.name()
 		console.log(`Account: ${accountName}`);
 		//if (accountName === 'iCloud') continue
 
+		currentApp.doShellScript(`echo 'Processing account.name=${sanitiseValue(accountName)}' >> '${logfile}'`)
+
 		Progress.description = 'Enumerating folders…'
 		const tree = enumerateFolders(account)
 		Progress.description = 'Enumerating notes…'
 		enumerateNotes(tree)
 		// console.log(JSON.stringify(tree, replacer, "  "))
-		
+
 		Progress.description = 'Exporting notes…'
 
 		recurseItems(tree, 0, (item, level) => {
 			// console.log(JSON.stringify(item.notes, replacer, "  "))
+			currentApp.doShellScript(`echo 'Processing folder.name=${sanitiseValue(item.name)}' >> '${logfile}'`)
 		
 			// Create destination folder if missing
 			currentApp.doShellScript(`mkdir -p '${item.path}'`)
 
 			// Save the notes, in various forms
 			//console.log(JSON.stringify(item.notes, replacer, "  "))
+			let exported = 0
 			for (const note of item.notes) {
 				//console.log(JSON.stringify(note, replacer, "  "))
 				const safeName = sanitisePath(note.name)
 				const safeValue = sanitiseValue(note.name)
 				const metaFile = item.path  + '/' + safeName + '.info.txt'
+
+				console.log(safeValue)
+				currentApp.doShellScript(`echo 'Exporting note id=${note.id} name=${safeValue}' >> '${logfile}'`)
 
 				Progress.additionalDescription = `Exporting ${note.name}…`
 
@@ -102,7 +112,7 @@ function enumerateAccounts() {
 					const attachmentFilename = `${item.path}/${attachmentFile}`
 					
 					// TODO: convert HEIC to JPEG as well
-					// Notes.save(att, {in: Path(attachmentFilename)})
+					Notes.save(att, {in: Path(attachmentFilename)})
 				}
 
 				// TODO - handle UTF8 properly? https://bru6.de/jxa/automating-applications/notes/
@@ -111,7 +121,10 @@ function enumerateAccounts() {
 
 				const textFile = `${item.path}/${safeName}.txt`
 				dumpToFile(note.aoNote.plaintext(), textFile)
+				
+				exported = exported + 1
 			}
+			currentApp.doShellScript(`echo 'Processed folder count=${exported}' >> '${logfile}'`)
 		}, true)
 	}
 }
@@ -127,7 +140,8 @@ function dumpToFile(text, fileName) {
 // Helper function to escape things that will go in shell single quote strings, that are not filenames
 function sanitiseValue(s) {
 	const result = s
-		.replace("'", "'\"'\"'", "g")
+		.replace(/'/g, "'\"'\"'")
+		.replace(/\(/g, "'\"(\"'")
 
 	return result // remember, return dot lines cant break...
 }
@@ -136,10 +150,12 @@ function sanitiseValue(s) {
 function sanitisePath(s) {
 	//console.log(`sanitisePath s=${s}`)
 	const result = s
-		.replace("'", "_", "g")
-		.replace("\"", "_", "g")
-		.replace("\\", "_", "g")
-		.replace("/", "_", "g")
+		.replace(/'/g, "_")
+		.replace(/\*/g, "_")
+		.replace(/\?/g, "_")
+		.replace(/\"/g, "_")
+		.replace(/\\/g, "_")
+		.replace(/\//g, "_")
 
 	return result // remember, return dot lines cant break...
 
@@ -183,6 +199,7 @@ function buildTree(list, fn, rootId) {
 	const numItems = list.length
 	for (let n=0; n < numItems; n++) {
 		const element = fn(list[n])
+		if (!element) { continue } // allow early filtering
 		const id = element.id
 		element.children = []
 		if (!hashMap.hasOwnProperty(id)) {
@@ -225,6 +242,9 @@ function enumerateFolders(account) {
 		const folderName = folder.name()
 		const parent = folder.container
 		const parentId = parent.id()
+		if (folderName === 'Recently Deleted') {
+			return null
+		}
 		Progress.additionalDescription = `Inspecting ${folderName}…`
 		return {
 			id: folderId,
@@ -264,8 +284,10 @@ function enumerateNotes(tree) {
 			const note = theNotes[n]
 			const noteId = note.id()
 			const noteName = note.name()
+			const safeValue = sanitiseValue(noteName)
+			console.log(safeValue)
 			// Ensure no names are duplicated
-			const noteNameNext = "" + noteName
+			let noteNameNext = "" + noteName
 			let x = 1
 			while (nameIndex.hasOwnProperty(noteNameNext)) {
 				noteNameNext = noteName + ` ${x}`
@@ -275,10 +297,12 @@ function enumerateNotes(tree) {
 
 			myNotes.push({
 				id: noteId,
-				name: noteName,
+				name: noteNameNext,
 				aoNote: note,
 				parent: item
+				
 			})
+			nameIndex[noteNameNext] = true
 		}
 		item.notes = myNotes
 	}, true);
