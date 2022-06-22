@@ -12,15 +12,24 @@ const desktopFolder = `${currentApp("desktop")}`;
 
 const globals = { }
 
+const Notes = Application('Notes')
+
 try {
 	start()
 } finally {
+	delete Notes
 	delete currentApp
 }
 
 function start() {
+	globals.exportedCount = 0
+	globals.errorCount = 0
 	globals.outputFolder = currentApp.chooseFolder({withPrompt:"Choose a folder to save exported notes to"})
+	const now = new Date()
+	globals.logfile = globals.outputFolder.toString() +`/log-${sanitisePath(now.toTimeString())}.txt`
+	currentApp.doShellScript(`echo 'Processing now=${sanitiseValue(now.toTimeString())}' > '${globals.logfile}'`)
 	enumerateAccounts();
+	currentApp.doShellScript(`echo 'Processed exported=${globals.exportedCount} errors=${globals.errorCount}' > '${globals.logfile}'`)
 }
 
 // Note:
@@ -34,18 +43,14 @@ function replacer(k, v) {
 
 // Process all accounts connected, or apply a filter and only process some or one
 function enumerateAccounts() {
-	const now = new Date()
-	const logfile = globals.outputFolder.toString() +`/log-${sanitisePath(now.toTimeString())}.txt`
-	const Notes = Application('Notes')
 	const numAccounts = Notes.accounts.length
-	currentApp.doShellScript(`echo 'Processing now=${sanitiseValue(now.toTimeString())}' > '${logfile}'`)
 	for (let n=0; n < numAccounts; n++) {
 		const account = Notes.accounts[n]
 		const accountName = account.name()
 		console.log(`Account: ${accountName}`);
 		//if (accountName === 'iCloud') continue
 
-		currentApp.doShellScript(`echo 'Processing account.name=${sanitiseValue(accountName)}' >> '${logfile}'`)
+		currentApp.doShellScript(`echo 'Processing account.name=${sanitiseValue(accountName)}' >> '${globals.logfile}'`)
 
 		Progress.description = 'Enumerating folders…'
 		const tree = enumerateFolders(account)
@@ -56,79 +61,101 @@ function enumerateAccounts() {
 		Progress.description = 'Exporting notes…'
 
 		recurseItems(tree, 0, (item, level) => {
-			// console.log(JSON.stringify(item.notes, replacer, "  "))
-			currentApp.doShellScript(`echo 'Processing folder.name=${sanitiseValue(item.name)}' >> '${logfile}'`)
-		
-			// Create destination folder if missing
-			currentApp.doShellScript(`mkdir -p '${item.path}'`)
-
-			// Save the notes, in various forms
-			//console.log(JSON.stringify(item.notes, replacer, "  "))
-			let exported = 0
-			for (const note of item.notes) {
-				//console.log(JSON.stringify(note, replacer, "  "))
-				const safeName = sanitisePath(note.name)
-				const safeValue = sanitiseValue(note.name)
-				const metaFile = item.path  + '/' + safeName + '.info.txt'
-
-				console.log(safeValue)
-				currentApp.doShellScript(`echo 'Exporting note id=${note.id} name=${safeValue}' >> '${logfile}'`)
-
-				Progress.additionalDescription = `Exporting ${note.name}…`
-
-				const created = note.aoNote.creationDate()
-				const updated = note.aoNote.modificationDate()
-				
-				const attachments = note.aoNote.attachments()
-				const numAttachments = attachments.length
-				
-				const encrypted = note.aoNote.passwordProtected()
-
-				currentApp.doShellScript(`echo 'id=${note.id}' > '${metaFile}'`)
-				currentApp.doShellScript(`echo 'parent=${note.parent.id}' >> '${metaFile}'`)
-				currentApp.doShellScript(`echo 'name=${safeValue}' >> '${metaFile}'`)
-				currentApp.doShellScript(`echo 'created=${created}' >> '${metaFile}'`)
-				currentApp.doShellScript(`echo 'updated=${updated}' >> '${metaFile}'`)
-				currentApp.doShellScript(`echo 'encrypted=${encrypted}' >> '${metaFile}'`)
-				currentApp.doShellScript(`echo 'attachments=${numAttachments}' >> '${metaFile}'`)
-
-				for (let v = 0; v < numAttachments; v++) {
-					const att = attachments[v]
-					const attachmentId = att.id()
-					const attachmentName = att.name()
-					const attachmentExt = attachmentName.split('.').reverse()[0]
-					const contentIdentifier = att.contentIdentifier()
-					const url = att.url()
-					// Convert to URL so we can get a name-id
-					// x-coredata://181F2744-C17D-41B1-B66D-AA72560FF0A2/ICAttachment/p1485
-					const attachmentCorePid = attachmentId.split('/').reverse()[0];
-					currentApp.doShellScript(`echo 'attachment.${v}.pid=${attachmentCorePid}' >> '${metaFile}'`)			
-					const attachmentFile = `${safeName}.${attachmentCorePid}.${attachmentExt}`
-					currentApp.doShellScript(`echo 'attachment.${v}.id=${attachmentId}' >> '${metaFile}'`)
-					currentApp.doShellScript(`echo 'attachment.${v}.cid=${contentIdentifier}' >> '${metaFile}'`)
-					currentApp.doShellScript(`echo 'attachment.${v}.url=${url}' >> '${metaFile}'`)
-					currentApp.doShellScript(`echo 'attachment.${v}.name=${attachmentName}' >> '${metaFile}'`)
-					currentApp.doShellScript(`echo 'attachment.${v}.file=${attachmentFile}' >> '${metaFile}'`)
-					const attachmentFilename = `${item.path}/${attachmentFile}`
-					
-					// TODO: convert HEIC to JPEG as well
-					Notes.save(att, {in: Path(attachmentFilename)})
-				}
-
-				// TODO - handle UTF8 properly? https://bru6.de/jxa/automating-applications/notes/
-				const dataFile = `${item.path}/${safeName}.html`
-				dumpToFile(note.aoNote.body(), dataFile)
-
-				const textFile = `${item.path}/${safeName}.txt`
-				dumpToFile(note.aoNote.plaintext(), textFile)
-				
-				exported = exported + 1
-			}
-			currentApp.doShellScript(`echo 'Processed folder count=${exported}' >> '${logfile}'`)
+			processNotesInFolder(item)
 		}, true)
 	}
 }
 
+function processNotesInFolder(item) {
+	// console.log(JSON.stringify(item.notes, replacer, "  "))
+	currentApp.doShellScript(`echo 'Processing folder.name=${sanitiseValue(item.name)}' >> '${globals.logfile}'`)
+		
+	// Create destination folder if missing
+	currentApp.doShellScript(`mkdir -p '${item.path}'`)
+
+	// Save the notes, in various forms
+	//console.log(JSON.stringify(item.notes, replacer, "  "))
+	let exported = 0
+	let errors = 0
+	for (const note of item.notes) {
+		try {
+			processNote(item, note)
+			exported = exported + 1
+			globals.exportedCount = globals.exportedCount + 1
+		} catch(e) {
+			errors = errors + 1
+			globals.errorCount = globals.errorCount + 1
+			currentApp.doShellScript(`echo 'Error processing note ${note.id} ${sanitiseValue(e.message)}' >> '${globals.logfile}'`)			
+		}
+	}
+	currentApp.doShellScript(`echo 'Processed folder count=${exported} errors=${errors}' >> '${globals.logfile}'`)
+}
+
+function processNote(item, note) {
+	//console.log(JSON.stringify(note, replacer, "  "))
+	const safeName = sanitisePath(note.name)
+	const safeValue = sanitiseValue(note.name)
+	const metaFile = item.path  + '/' + safeName + '.info.txt'
+
+	console.log(safeValue)
+	currentApp.doShellScript(`echo 'Exporting note id=${note.id} name=${safeValue}' >> '${globals.logfile}'`)
+
+	Progress.additionalDescription = `Exporting ${note.name}…`
+
+	const created = note.aoNote.creationDate()
+	const updated = note.aoNote.modificationDate()
+	const attachments = note.aoNote.attachments()
+	const numAttachments = attachments.length
+	const encrypted = note.aoNote.passwordProtected()
+	currentApp.doShellScript(`echo 'id=${note.id}' > '${metaFile}'`)
+	currentApp.doShellScript(`echo 'parent=${note.parent.id}' >> '${metaFile}'`)
+	currentApp.doShellScript(`echo 'name=${safeValue}' >> '${metaFile}'`)
+	currentApp.doShellScript(`echo 'created=${created}' >> '${metaFile}'`)
+	currentApp.doShellScript(`echo 'updated=${updated}' >> '${metaFile}'`)
+	currentApp.doShellScript(`echo 'encrypted=${encrypted}' >> '${metaFile}'`)
+	currentApp.doShellScript(`echo 'attachments=${numAttachments}' >> '${metaFile}'`)
+	for (let v = 0; v < numAttachments; v++) {
+		const att = attachments[v]
+		const attachmentId = att.id()
+		currentApp.doShellScript(`echo 'attachment.${v}.id=${attachmentId}' >> '${metaFile}'`)
+		const attachmentName = att.name()
+		const contentIdentifier = att.contentIdentifier()
+		const url = att.url()
+		// Convert to URL so we can get a name-id
+		// x-coredata://181F2744-C17D-41B1-B66D-AA72560FF0A2/ICAttachment/p1485
+		const attachmentCorePid = attachmentId.split('/').reverse()[0];
+		currentApp.doShellScript(`echo 'attachment.${v}.pid=${attachmentCorePid}' >> '${metaFile}'`)			
+		currentApp.doShellScript(`echo 'attachment.${v}.cid=${contentIdentifier}' >> '${metaFile}'`)
+		currentApp.doShellScript(`echo 'attachment.${v}.url=${url}' >> '${metaFile}'`)
+		currentApp.doShellScript(`echo 'attachment.${v}.name=${attachmentName}' >> '${metaFile}'`)
+
+		const attachmentExt = getExt(attachmentName)
+		if (attachmentExt === "" || attachmentExt) {
+			// If the attachment is named, and has no extension, attempt to save it as a PDF
+			// It seems that save does an auto conversion, there is no raw method
+			const attExt = (attachmentExt === '' ? '.pdf' : ('.' + attachmentExt))
+			const attachmentFile = `${safeName}.${attachmentCorePid}${attExt}`
+			currentApp.doShellScript(`echo 'attachment.${v}.file=${attachmentFile}' >> '${metaFile}'`)
+
+			// TODO: convert HEIC to JPEG as well
+			const attachmentFilename = `${item.path}/${attachmentFile}`
+			Notes.save(att, {in: Path(attachmentFilename)})
+		}
+	}
+	// TODO - handle UTF8 properly? https://bru6.de/jxa/automating-applications/notes/
+	const dataFile = `${item.path}/${safeName}.html`
+	dumpToFile(note.aoNote.body(), dataFile)
+
+	const textFile = `${item.path}/${safeName}.txt`
+	dumpToFile(note.aoNote.plaintext(), textFile)
+}
+
+function getExt(fileName) {
+	if (!fileName) return null
+	const r = fileName.split('.')
+	if (r.length < 2) return ""
+	return r.reverse()[0]	
+}
 
 function dumpToFile(text, fileName) {
 	const f = currentApp.openForAccess(Path(fileName), { writePermission: true })
