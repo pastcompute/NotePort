@@ -12,6 +12,8 @@ const desktopFolder = `${currentApp("desktop")}`;
 
 const globals = { }
 
+const GoodAttachments = ['pdf', 'heic', 'png', 'jpeg']
+
 const Notes = Application('Notes')
 
 try {
@@ -25,6 +27,7 @@ function start() {
 	globals.exportedCount = 0
 	globals.errorCount = 0
 	globals.outputFolder = currentApp.chooseFolder({withPrompt:"Choose a folder to save exported notes to"})
+	// alt: sys.pathTo("documents folder", {from: "user domain", as: "alias"}).toString() + '/blah';
 	const now = new Date()
 	globals.logfile = globals.outputFolder.toString() +`/log-${sanitisePath(now.toTimeString())}.txt`
 	currentApp.doShellScript(`echo 'Processing now=${sanitiseValue(now.toTimeString())}' > '${globals.logfile}'`)
@@ -114,6 +117,12 @@ function processNote(item, note) {
 	currentApp.doShellScript(`echo 'updated=${updated}' >> '${metaFile}'`)
 	currentApp.doShellScript(`echo 'encrypted=${encrypted}' >> '${metaFile}'`)
 	currentApp.doShellScript(`echo 'attachments=${numAttachments}' >> '${metaFile}'`)
+	// TODO - handle UTF8 properly? https://bru6.de/jxa/automating-applications/notes/
+	const dataFile = `${item.path}/${safeName}.html`
+	dumpToFile(note.aoNote.body(), dataFile)
+
+	const textFile = `${item.path}/${safeName}.txt`
+	dumpToFile(note.aoNote.plaintext(), textFile)
 	for (let v = 0; v < numAttachments; v++) {
 		const att = attachments[v]
 		const attachmentId = att.id()
@@ -129,25 +138,56 @@ function processNote(item, note) {
 		currentApp.doShellScript(`echo 'attachment.${v}.url=${url}' >> '${metaFile}'`)
 		currentApp.doShellScript(`echo 'attachment.${v}.name=${attachmentName}' >> '${metaFile}'`)
 
-		const attachmentExt = getExt(attachmentName)
-		if (attachmentExt === "" || attachmentExt) {
-			// If the attachment is named, and has no extension, attempt to save it as a PDF
-			// It seems that save does an auto conversion, there is no raw method
-			const attExt = (attachmentExt === '' ? '.pdf' : ('.' + attachmentExt))
-			const attachmentFile = `${safeName}.${attachmentCorePid}${attExt}`
-			currentApp.doShellScript(`echo 'attachment.${v}.file=${attachmentFile}' >> '${metaFile}'`)
+		tryHardAndSaveAttachment(item.path, `${safeName}.${attachmentCorePid}`, attachmentName, att, v, metaFile)
+	}
+}
 
-			// TODO: convert HEIC to JPEG as well
-			const attachmentFilename = `${item.path}/${attachmentFile}`
-			Notes.save(att, {in: Path(attachmentFilename)})
+// If the attachment is named, and has no extension, attempt to save it as a heic
+// This function is intended to use a different filename (aka notename.attachmentpidnumber.ext instead of attachmentname.ext)
+// Some images / captures seem to be like this
+// If that failed, try again as a PNG
+// If that failed, try again as a PDF etc. Could be audio as well, need to test
+// Also the problem of an 'extension' that is not, i.e. one with a dot in an unknown extension type name
+function tryHardAndSaveAttachment(path, basename, attachmentName, att, v, metaFile) {
+	const attachmentExt = sanitisePath(getExt(attachmentName))
+	if (GoodAttachments.includes(attachmentExt || '')) {
+		const attachmentFile = `${basename}.${attachmentExt}`
+		currentApp.doShellScript(`echo 'attachment.${v}.file=${sanitiseValue(attachmentFile)}' >> '${metaFile}'`)
+		// TODO: convert HEIC to JPEG as well
+		const attachmentFilename = `${path}/${attachmentFile}`
+		Notes.save(att, {in: Path(attachmentFilename)})
+		return
+	}
+	// try as native format:
+	if (true) {
+		const attachmentFile = `${basename}-native`
+		currentApp.doShellScript(`echo 'attachment.${v}.file.attempt=${attachmentFile}' >> '${metaFile}'`)
+		const attachmentFilename = `${path}/${attachmentFile}`
+		try {
+			Notes.save(att, {in: Path(attachmentFilename), as: 'native format'})
+			return
+		} catch (e) {
+			currentApp.doShellScript(`echo 'Error attempting to save attachment {${sanitiseValue(attachmentName)}}: ${sanitiseValue(e.message)}' >> '${globals.logfile}'`)			
 		}
 	}
-	// TODO - handle UTF8 properly? https://bru6.de/jxa/automating-applications/notes/
-	const dataFile = `${item.path}/${safeName}.html`
-	dumpToFile(note.aoNote.body(), dataFile)
-
-	const textFile = `${item.path}/${safeName}.txt`
-	dumpToFile(note.aoNote.plaintext(), textFile)
+	
+	// OK, just try a bunch of known extensions until we find one
+	let worked = false
+	for (const ext of GoodAttachments) {
+		const attachmentFile = `${basename}.${ext}`
+		currentApp.doShellScript(`echo 'attachment.${v}.file.attempt=${attachmentFile}' >> '${metaFile}'`)
+		const attachmentFilename = `${path}/${attachmentFile}`
+		try {
+			Notes.save(att, {in: Path(attachmentFilename), as: 'native format'})
+			worked = true
+			break // we must have succeeded
+		} catch(e) {
+			currentApp.doShellScript(`echo 'Error attempting to save attachment {${sanitiseValue(attachmentName)}}: ${sanitiseValue(e.message)}' >> '${globals.logfile}'`)			
+		}
+	}
+	if (!worked) {
+	    throw new Error("Unable to save attachment") // ensure counter
+	}
 }
 
 function getExt(fileName) {
@@ -166,9 +206,9 @@ function dumpToFile(text, fileName) {
 
 // Helper function to escape things that will go in shell single quote strings, that are not filenames
 function sanitiseValue(s) {
-	const result = s
+	const result = !!s ? s
 		.replace(/'/g, "'\"'\"'")
-		.replace(/\(/g, "'\"(\"'")
+		.replace(/\(/g, "'\"(\"'") : s
 
 	return result // remember, return dot lines cant break...
 }
@@ -176,13 +216,13 @@ function sanitiseValue(s) {
 // Helper function to strip out slashes and such and replace them with underscores, etc.
 function sanitisePath(s) {
 	//console.log(`sanitisePath s=${s}`)
-	const result = s
+	const result = !!s ? s
 		.replace(/'/g, "_")
 		.replace(/\*/g, "_")
 		.replace(/\?/g, "_")
 		.replace(/\"/g, "_")
 		.replace(/\\/g, "_")
-		.replace(/\//g, "_")
+		.replace(/\//g, "_") : s
 
 	return result // remember, return dot lines cant break...
 
