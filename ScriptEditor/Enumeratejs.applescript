@@ -3,7 +3,12 @@
 // https://brianlovin.com/hn/31579435
 // https://gist.github.com/JMichaelTX/d29adaa18088572ce6d4
 // https://developer.apple.com/library/mac/releasenotes/InterapplicationCommunication/RN-JavaScriptForAutomation/Articles/OSX10-10.html
+// https://developer.apple.com/library/archive/documentation/LanguagesUtilities/Conceptual/MacAutomationScriptingGuide/MakeaSystem-WideService.html#//apple_ref/doc/uid/TP40016239-CH46-SW1
+// https://stackoverflow.com/questions/48255943/accessing-properties-of-object-using-jxa
+// https://stackoverflow.com/a/48271686/2772465
 
+// WARNING
+// RUN
 
 const currentApp = Application.currentApplication();
 currentApp.includeStandardAdditions = true;
@@ -107,7 +112,7 @@ function processNote(item, note) {
 
 	const created = note.aoNote.creationDate()
 	const updated = note.aoNote.modificationDate()
-	const attachments = note.aoNote.attachments()
+	const attachments = note.aoNote.attachments
 	const numAttachments = attachments.length
 	const encrypted = note.aoNote.passwordProtected()
 	currentApp.doShellScript(`echo 'id=${note.id}' > '${metaFile}'`)
@@ -138,7 +143,7 @@ function processNote(item, note) {
 		currentApp.doShellScript(`echo 'attachment.${v}.url=${url}' >> '${metaFile}'`)
 		currentApp.doShellScript(`echo 'attachment.${v}.name=${attachmentName}' >> '${metaFile}'`)
 
-		tryHardAndSaveAttachment(item.path, `${safeName}.${attachmentCorePid}`, attachmentName, att, v, metaFile)
+		tryHardAndSaveAttachment(item.path, `${safeName}.${attachmentCorePid}`, attachmentName, att, v, metaFile, contentIdentifier)
 	}
 }
 
@@ -148,16 +153,21 @@ function processNote(item, note) {
 // If that failed, try again as a PNG
 // If that failed, try again as a PDF etc. Could be audio as well, need to test
 // Also the problem of an 'extension' that is not, i.e. one with a dot in an unknown extension type name
-function tryHardAndSaveAttachment(path, basename, attachmentName, att, v, metaFile) {
+function tryHardAndSaveAttachment(path, basename, attachmentName, att, v, metaFile, cid) {
 	const attachmentExt = sanitisePath(getExt(attachmentName))
 	if (GoodAttachments.includes(attachmentExt || '')) {
 		const attachmentFile = `${basename}.${attachmentExt}`
 		currentApp.doShellScript(`echo 'attachment.${v}.file=${sanitiseValue(attachmentFile)}' >> '${metaFile}'`)
 		// TODO: convert HEIC to JPEG as well
 		const attachmentFilename = `${path}/${attachmentFile}`
-		Notes.save(att, {in: Path(attachmentFilename)})
-		return
+		try {
+			Notes.save(att, {in: Path(attachmentFilename)})
+			return
+		} catch (e) {
+			currentApp.doShellScript(`echo 'Error (1) attempting to save attachment {${sanitiseValue(attachmentName)}}: ${sanitiseValue(e.message)}' >> '${globals.logfile}'`)			
+		}	
 	}
+	currentApp.doShellScript(`echo 'Erroring / unusual attachment cid=${cid}' >> '${globals.logfile}'`)
 	// try as native format:
 	if (true) {
 		const attachmentFile = `${basename}-native`
@@ -167,9 +177,11 @@ function tryHardAndSaveAttachment(path, basename, attachmentName, att, v, metaFi
 			Notes.save(att, {in: Path(attachmentFilename), as: 'native format'})
 			return
 		} catch (e) {
-			currentApp.doShellScript(`echo 'Error attempting to save attachment {${sanitiseValue(attachmentName)}}: ${sanitiseValue(e.message)}' >> '${globals.logfile}'`)			
+			currentApp.doShellScript(`echo 'Error (2) attempting to save attachment {${sanitiseValue(attachmentName)}}: ${sanitiseValue(e.message)}' >> '${globals.logfile}'`)			
 		}
 	}
+	
+	//Notes.show(att, {separately: true})
 	
 	// OK, just try a bunch of known extensions until we find one
 	let worked = false
