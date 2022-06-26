@@ -225,6 +225,8 @@ function sanitiseValue(s) {
 	return result // remember, return dot lines cant break...
 }
 
+
+// Alt: const dirName = n.name().replaceAll(/[:/&<>|]/g, "_");
 // Helper function to strip out slashes and such and replace them with underscores, etc.
 function sanitisePath(s) {
 	//console.log(`sanitisePath s=${s}`)
@@ -385,5 +387,13 @@ function enumerateNotes(tree) {
 		}
 		item.notes = myNotes
 	}, true);
+}
+
+ObjC.import("Foundation");
+function writeUTF8(fileName, text) {
+  const str = $.NSString.alloc.initWithUTF8String(text);
+  str.writeToFileAtomicallyEncodingError(
+    fileName, true, $.NSUTF8StringEncoding, null
+  );
 }
 

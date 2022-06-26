@@ -1,8 +1,10 @@
 (function(){
-'usr strict'
+'use strict'
 const currentApp = Application.currentApplication();
 currentApp.includeStandardAdditions = true;
 const desktopFolder = `${currentApp("desktop")}`;
+const documentsFolder = currentApp.pathTo("documents folder", {from: "user domain", as: "alias"}).toString()
+console.log(documentsFolder)
 const Notes = Application('Notes')
 
 const selection = Notes.selection()
@@ -25,15 +27,84 @@ const numAttachments = attachments.length
 console.log('Note.id=' + note.id())
 console.log('numAttachments=' + numAttachments)
 
+function getExt(fileName) {
+	if (!fileName) return null
+	const r = fileName.split('.')
+	if (r.length < 2) return ""
+	return r.reverse()[0]	
+}
+
+function getSuff(fileName) {
+	if (!fileName) return null
+	const r = fileName.split('/')
+	if (r.length < 2) return ""
+	return r.reverse()[0]	
+}
+
+
 // Notably, some exports dont have their item as an attachment...
 // Solution must only be, to de-embed the embedded HTML data URL
 // Some of these are direct camera captures
 
 if (numAttachments > 0) {
 	console.log('AttachmentId=' + attachments[0].id())
-	console.log(attachments[0].properties())
+	for (let n = 0; n < numAttachments; n++) {
+		const att = attachments[n]
+		const props = att.properties()
+		console.log('props')
+		console.log(props)
+		// pcls == 'attachment'
+		// creationDate, modificationDate, shared, contents == null, name, url == null
+		// id == 'x-coredata://181F2744-C17D-41B1-B66D-AA72560FF0A2/ICAttachment/p821'
+		// contentIdentifier == 'cid:12FB1CFC-57AE-45AA-A401-778C457EEF77@icloud.apple.com'
+		// container == app.notes.byId("x-coredata://181F2744-C17D-41B1-B66D-AA72560FF0A2/ICNote/p818")
+		
+		let attachmentExtension = getExt(props.name)
+		if (!attachmentExtension) {
+			attachmentExtension = 'pdf'
+		}
+		const attachmentFilename = getSuff(props.id) + '.' + attachmentExtension
+		const attachmentPathname = `${documentsFolder}/${attachmentFilename}`
+		try {
+			//Notes.save(att, {in: Path(attachmentPathname)}) // Note, this works for working attachments
+			// Working attachments:
+			// - contents != null, is instead a Path()
+			// - name, has an extension such as .png
+			
+			
+			//Notes.save(att, {in: Path(attachmentPathname), as: 'native format'})
+			//Notes.save(att, {in: Path(attachmentPathname), as: 'pdf'})
+			//Notes.save(att, {in: Path(attachmentPathname), as: 'png'})
+			//Notes.save(att, {in: Path(attachmentPathname), as: 'JPEG'})
+			// as pdf --> -1700 cant convert types (this is a step forward, vs -10000 AppleEvent handler failed. png is also cant convert types
+			// using att() or att doesnt matter
+			
+			//Notes.show(att, {separately: true})
+			// Make this work for working atts:
+			//Notes.delete(att) // works ...
+			//Notes.duplicate(att, {to: Path(attachmentPathname)}) //nope - 1700 cant convert - for ALL 
+			// Notes.duplicate(att) // -1717 handler is not defined
+			//Notes.duplicate(att, {to: Path(documentsFolder)}) //not a dir - 1700 cant convert - for ALL 
+			//att.duplicate({to: Path(documentsFolder)})
+			//att.save({in: Path(attachmentPathname)}) // alt for working ones; -10000 for fails
+			//att.save({in: Path(documentsFolder)}) // alt for working ones; -10000 for fails
+			att.save({in: attachmentPathname}) // alt for working ones; -10000 for fails
+			// Notes.show(att) // works
+		} catch (e) {
+			console.log('oops')
+			console.log(e)
+			console.log(e.message)
+		}
+	}
 	// Attachments that work, has a 'contents' property which is a Path()
 	// Some have an iCloud ID, is this the common factor in the errors?
+	
+	// Duplicating and moving a note to 'On My Mac' still fails in same way
+	// Note, where the attach should go is always `<div><br><br></div>`
+	
+	// Turns out after exporting the file is actually in /private/var/folders/k3/3mjy7nb50zqcwq0s4pwdp8sc0000gn/T/com.apple.Notes/galleryTempPDFFolder/12FB1CFC-57AE-45AA-A401-778C457EEF77/1656238995/The First 2 Hours.pdf
+	// Same location is in clipboard... but only after we copy it
+	
 }
 
 // It looks like the errors are always iCloud, and have no file extension in the name
@@ -48,3 +119,6 @@ if (numAttachments > 0) {
 
 
 })()
+
+//    var sys = Application("System Events");
+//    var user_name = sys.currentUser().name();
