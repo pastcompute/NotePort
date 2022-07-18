@@ -6,8 +6,26 @@ currentApp.includeStandardAdditions = true
 const Notes = Application('Notes')
 const SystemEvents = Application("System Events")
 
+// WARNING
+// - do not try and use the mac for other stuff, less junk gets into the clipboard...
+
+// OK, in the output directory, we will
+// - recreate the folder hierarchy as directories
+// - generate a log, for debugging
+// - generate a metadata json log, for posterity. This will have one JSON object per line, the user can wrap it in [] later
+
+// Inspiration:
+// https://jxa-examples.akjems.com
+// https://forum.keyboardmaestro.com/t/how-to-use-jxa-with-system-events-app/6341/3
+// https://eastmanreference.com/complete-list-of-applescript-key-codes
+
 const globals = { }
 const MAX_FOLDER_DEPTH = 16
+const KEY_ENTER = 36
+const KEY_CMND = 55
+const KEY_SHIFT = 56
+const KEY_G = 5
+const KEY_ARROW_RIGHT = 124
 
 const ContainerKind = Object.freeze({
 	Account: Symbol("Account"),
@@ -57,7 +75,7 @@ const FileUtils = (function() {
 			if (!fileName) return null
 			const r = fileName.split('.')
 			if (r.length < 2) return ""
-			return r.reverse()[0] // this method feels rather inefficient...
+			return r.at(-1)
 		},
         fileExists: function(path) {
             const result = this.getFileOrFolderExists(path);
@@ -101,29 +119,54 @@ function safeCommandPress(sequence) {
 	}	
 }
 
-function exportSlowPdf(oProcess, destDir) {
+// Such majestic hacks needed. sigh.
+const CANARY = '[None][None][None][None][None][None]'
+
+function copyClipboard(setterFunction=null) {
+	currentApp.setTheClipboardTo(CANARY)
+	delay(0.1)
+	if (!setterFunction) {
+		SystemEvents.keystroke('a', {using: 'command down'})
+		delay(0.1)
+		// Copy to clipboard
+		SystemEvents.keystroke('c', {using: 'command down'})
+		delay(0.1)
+	} else if (!setterFunction()) { return }	
+	const delay_s = 0.1
+	let ttl = 5.0 / delay_s // seconds --> interval
+	while (true) {
+		const clipContents = currentApp.theClipboard()
+		if (clipContents === CANARY) {
+			delay(delay_s) ; ttl-- ; if (ttl <= 0) throw "Clipboard timeout"
+			continue
+		}
+		return clipContents
+	}
+}
+
+function pasteClipboard(value) {
+	currentApp.setTheClipboardTo(value)
+	delay(0.2)
+	SystemEvents.keystroke('v', {using: 'command down'})
+}
+
+function exportPdfBySendingSystemEvents(oProcess, destDir, noteData) {
 	const fileMenu = oProcess.menuBars[0].menuBarItems.byName('File')
 	const exportMenu = fileMenu.menus[0].menuItems.byName('Export as PDF…')
 	exportMenu.click()
 	delay(0.6)
 	
 	// Copy whatever the current export suggested name is
-	SystemEvents.keystroke('a', {using: 'command down'})
-	delay(0.1)
-	SystemEvents.keystroke('c', {using: 'command down'})
-	delay(0.1)
-	const clipContents = currentApp.theClipboard()
+	const clipContents = copyClipboard()
+	if (!clipContents) throw "Invalid clipboard"
 	
 	// Cmnd+Shift+g to expand the folder selector
-	safeCommandPress([55, 56, 5]) // command, shift, g
+	safeCommandPress([KEY_CMND, KEY_SHIFT, KEY_G]) // command, shift, g
 
-	// type in the correct directory, then press ENTER
-	delay(0.2) // sigh
-	for (let c of destDir) { 
-		SystemEvents.keystroke(c)
-		delay(0.01) // we seem to be able to cope with making this 10 msec
-	}
-	safeCommandPress([36])
+	// Paste in the correct directory, then press ENTER
+	pasteClipboard(destDir)
+	delay(0.1)
+	safeCommandPress([KEY_ENTER])
 	
 	// Now combine the suggested filename with the clipboard so we can test if it already exists...
 	// If it does then we will add a 'copy-1' etc before the extension...
@@ -145,16 +188,12 @@ function exportSlowPdf(oProcess, destDir) {
 	}
 	if (paster) {
 		delay(0.1)
-		SystemEvents.keystroke('a', {using: 'command down'})
-		delay(0.1)
-		for (let c of paster) {
-			SystemEvents.keystroke(c)
-			delay(0.01)
-		}
+		pasteClipboard(paster)
 	}
-	// And press ENTER to do it
+	// And press ENTER to start export
 	delay(0.05)
-	safeCommandPress([36])
+	safeCommandPress([KEY_ENTER])
+	return true
 }
 
 // Process all accounts connected, or (TODO) apply a filter and only process some or one
@@ -196,13 +235,15 @@ function enumerateAccounts() {
 			for (let k=0; k < numNotes; k++) {
 				const noteRef = notesRef[k]
 				const noteName = noteRef.name()
+				const noteId = noteRef.id()
+
 				globals.processed.notesSeen ++
-				trace(`note.name=${noteName}`)
+				trace(`note.name=${noteName}, note.id=${noteId}`)
 				Progress.additionalDescription = `Note ${noteName}`
 			
 				const noteData = {
 					noteRef: noteRef,
-					id: noteRef.id(),
+					id: noteId,
 					name: noteName,
 					created: noteRef.creationDate(),
 					modified: noteRef.modificationDate(),
@@ -218,15 +259,16 @@ function enumerateAccounts() {
 					throw `We cant handle a folder nest of ${MAX_FOLDER_DEPTH} layers deep!`
 				}
 				const notePath = noteData.parents.map(x => FileUtils.sanitisePath(x.name)).reverse().join('/')
-				trace(`note.path=${notePath}`)
-				trace(`note.id=${noteData.id}`)
+				// trace(`note.path=${notePath}`)
+				noteData.path = notePath
 				
 				const destDir = `${globals.outputFolder}/${notePath}`
 				currentApp.doShellScript(`mkdir -p '${destDir}'`)
 
 				Notes.show(noteRef)
-				
-				exportSlowPdf(globals.oProcess, destDir)
+				if (!exportPdfBySendingSystemEvents(globals.oProcess, destDir, noteData)) {
+					return
+				}
 			}
 		}
 	}

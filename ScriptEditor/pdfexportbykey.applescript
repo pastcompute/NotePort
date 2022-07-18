@@ -63,6 +63,31 @@ const fileMenu = oProcess.menuBars[0].menuBarItems.byName('File')
 const exportMenu = fileMenu.menus[0].menuItems.byName('Export as PDF…')
 exportMenu.click()
 
+const CANARY = '[None][None][None][None][None][None]'
+
+function copyClipboard(setterFunction=null) {
+	currentApp.setTheClipboardTo(CANARY)
+	delay(0.1)
+	if (!setterFunction) {
+		seApp.keystroke('a', {using: 'command down'})
+		delay(0.1)
+		// Copy to clipboard
+		seApp.keystroke('c', {using: 'command down'})
+		delay(0.1)
+	} else if (!setterFunction()) { return }	
+	const delay_s = 0.2
+	let ttl = 5.0 / delay_s // seconds --> interval
+	while (true) {
+		const clipContents = currentApp.theClipboard()
+		if (clipContents === CANARY) {
+			delay(delay_s) ; ttl-- ; if (ttl <= 0) throw "Clipboard timeout"
+			continue
+		}
+		return clipContents
+	}
+}
+
+
 // Now, how do we click on the dialog that popped up? Send ENTER
 // These delays are finnicky
 delay(0.6)
@@ -70,20 +95,14 @@ delay(0.6)
 // https://forum.keyboardmaestro.com/t/how-to-use-jxa-with-system-events-app/6341/3
 // https://eastmanreference.com/complete-list-of-applescript-key-codes
 // 1. It starts with the cursor in the filename, so lets press Command+A to grab it all
-seApp.keystroke('a', {using: 'command down'})
 
 //seApp.keyDown('eCmd'); // this actually types. WTF
 //seApp.keyDown(56); // command
 //seApp.keystroke('a')
 //seApp.keyUp(56);
 
-delay(0.1)
-
-// Copy to clipboard
-seApp.keystroke('c', {using: 'command down'})
-delay(0.1)
-
-const clipContents = currentApp.theClipboard()
+const clipContents = copyClipboard()
+if (!clipContents) throw "bad clipboard"
 
 //console.log(oProcess.properties())
 // https://support.apple.com/en-au/HT201236
@@ -106,10 +125,14 @@ seApp.keyUp(56);
 if (good) {
 	delay(0.2)
  	// this is too fast due to autocomplete --> seApp.keystroke(`${destDir}`)
-	for (let c of destDir) { 
-	seApp.keystroke(c)
-	delay(0.01)
-	}
+	// for (let c of destDir) { seApp.keystroke(c) ; delay(0.01) ; }
+
+	// PASTE
+	currentApp.setTheClipboardTo(destDir)
+	delay(0.2)
+	seApp.keystroke('v', {using: 'command down'})
+	delay(0.1)
+
 
 	// ENTER
 	seApp.keyDown(36) 
