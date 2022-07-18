@@ -1,7 +1,7 @@
 #!/bin/sh
 #
 # Copy script(s) from my iCloud Scripts folder to here
-# Decompile any
+# Decompile any back to javascript or applescript text so we can track changes in git.
 
 
 ICLOUD="$HOME/Library/Mobile Documents"
