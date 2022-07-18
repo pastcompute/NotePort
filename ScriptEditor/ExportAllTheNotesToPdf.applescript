@@ -248,7 +248,7 @@ function enumerateAccounts() {
 				const noteId = noteRef.id()
 
 				globals.processed.notesSeen ++
-				trace(`note.name=${noteName}, note.id=${noteId}`)
+				trace(`note: id=${noteId}, name=${noteName}`)
 				Progress.additionalDescription = `Note ${noteName}`
 			
 				const noteData = {
@@ -284,7 +284,8 @@ function enumerateAccounts() {
 				if(bailOut) {
 					return
 				}
-				// uncomment here to only export one note, for testing
+				// uncomment lines here to only export one note, for testing; or play with the counter
+				// if (globals.processed.notesSeen > 1) return
 				// return
 			}
 		}
@@ -312,10 +313,10 @@ try {
 } finally {
 }
 
+// Seeing as we got this far, add the square brackets and commas to the JSON file to make it a proper JSON file
+currentApp.doShellScript(`sed -i '' -e '1s@^@[@' -e '2,$s@^@,@' -e '$s@$@]@' '${globals.metafile}'`)
+
 trace(`Processed accounts=${globals.processed.accounts} folders=${globals.processed.folders} notesSeen=${globals.processed.notesSeen}`)
-
-//trace(`Processed exported=${globals.exportedCount} errors=${globals.errorCount}`)
-
 })()
 
 // code: language=JXA insertSpaces=false tabSize=4
