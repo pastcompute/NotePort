@@ -22,6 +22,12 @@ Due to the way this sends keys and interacts with the clipboard, once the proces
 
 It can be aborted by hitting the Stop button in the Scripting App.
 
+# Future enhancements
+
+- enumerate the attachments in the metadata file
+- add a UI to allow a single folder to be selected, or other kinds of filtering
+- maybe crack the problems with generating HTML and exposing the attachments
+
 # Repository contents
 
 The only script you need is `ScriptEditor/ExportAllTheNotesToPdf.scpt`, all the others are experiments where I was trying to find a way to use the Notes applescript API to get the underlying content and enumerate all the original attachments, and save the result in HTML as I was originally hoping to convert it to Markdown and at the same time preserve attachments in separate files. However, a good chunk of my notes just failed.

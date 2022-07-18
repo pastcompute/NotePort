@@ -58,8 +58,7 @@ function getContainerKind(item) {
 function getContainerInfo(containerRef) {
 	const result = {
 		id: containerRef.id(),
-		name: containerRef.name(),
-		parentRef: null
+		name: containerRef.name()
 	}
 	result.kind = getContainerKind(result)
 	if (result.kind === ContainerKind.Folder) {
@@ -108,6 +107,11 @@ function sanitiseValue(s) {
 
 function trace(message) {
 	currentApp.doShellScript(`echo '${sanitiseValue(message)}' >> '${globals.logfile}'`)
+}
+
+function recordMetadata(item) {
+	const s = JSON.stringify(item)
+	currentApp.doShellScript(`echo '${sanitiseValue(s)}' >> '${globals.metafile}'`)
 }
 
 // We had situations where if the script is aborted or throws an exception, a key can be stuck down (like, seriously, Apple!)
@@ -191,6 +195,7 @@ function exportPdfBySendingSystemEvents(oProcess, destDir, noteData) {
 		filePathTry = Path(`${destDir}/${paster}`).toString()
 		fn = fn + 1
 	}
+	noteData.actualFilename = filePathTry
 	if (paster) {
 		delay(0.1)
 		pasteClipboard(paster)
@@ -252,6 +257,9 @@ function enumerateAccounts() {
 					name: noteName,
 					created: noteRef.creationDate(),
 					modified: noteRef.modificationDate(),
+					passwordProtected: noteRef.passwordProtected(),
+					shared: noteRef.shared(),
+					attachmentCount: noteRef.attachments.length,
 					parents: [getContainerInfo(noteRef.container())],
 				}
 				let n = 1
@@ -271,9 +279,13 @@ function enumerateAccounts() {
 				currentApp.doShellScript(`mkdir -p '${destDir}'`)
 
 				Notes.show(noteRef)
-				if (!exportPdfBySendingSystemEvents(globals.oProcess, destDir, noteData)) {
+				const bailOut = !exportPdfBySendingSystemEvents(globals.oProcess, destDir, noteData)
+				recordMetadata(noteData)
+				if(bailOut) {
 					return
 				}
+				// uncomment here to only export one note, for testing
+				// return
 			}
 		}
 	}
@@ -285,6 +297,7 @@ function start() {
 	globals.outputFolder = currentApp.chooseFolder({withPrompt:"Choose destination folder…"})
 	const now = new Date().toTimeString()
 	globals.logfile = globals.outputFolder.toString() +`/log-${FileUtils.sanitisePath(now)}.txt`
+	globals.metafile = globals.outputFolder.toString() +`/metadata-${FileUtils.sanitisePath(now)}.json`
 	trace(`Processing now=${now}`)
 
 	Notes.activate()
