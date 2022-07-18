@@ -1,10 +1,10 @@
-# Notesport - Apple Notes PDF exporter
+# Noteport - Apple Notes PDF exporter
 
-This program will actually, properly, in a WYSIWYG manner, export every note in your Notes app to PDF, while preserving (inasmuch there are special characters that might need adjusting) the folder hierarchy and notes titles, and dealing with avoiding duplicate filenames.
+This program will actually, properly, in a WYSIWYG manner, from a Mac, export every note in your Apple Notes app to PDF, while preserving (inasmuch there are special characters that might need adjusting) the folder hierarchy and notes titles, and avoiding duplicate filenames.
 
-Unfortunately, it works by sending keyboard events to notes, because I have not succesfully managed to get the AOSC API to properly export attachments in all cases - in my own case, about 1 in 4 pictures or other attachments just wont export (usually, it seems to be somehow related to iCloud), at all. Indeed, in this incarnation, some things are still probably lost (e.g. if you attached a PDF inside a note; also, images in 'small' format will end up in the PDF, as, well, small in size.) But at a minimum, all notes including text, formatting Apple Pencil markup and images, will end up in PDF as you would see them in notes. Which makes it a useful backup when you primarly use notes as a journal or dumping ground. 
+Unfortunately, it works by sending keyboard events to notes, because I have not succesfully managed to get the AOSC API to properly export attachments in all cases; in my own case, about 1 in 4 pictures or other attachments just won't export (usually, it seems to be somehow related to iCloud), at all. Indeed, in this incarnation, some things are still probably lost (e.g. if you attached a PDF inside a note; also, images in 'small' format will end up in the PDF, as, well, small in size.) But at a minimum, all notes including text, formatting Apple Pencil markup and images, will end up in PDF as you would see them in notes. Which makes it a useful backup when you primarly use notes as a journal or dumping ground.
 
-One day Apple will give notes a proper API like the Calendar and other things do.
+One day Apple will give Notes a proper API like the Calendar and other things seem to have now.
 
 # Usage
 
@@ -21,6 +21,8 @@ For best results, choose a new empty folder!
 Due to the way this sends keys and interacts with the clipboard, once the process starts, avoid using the computer to do anything else!
 
 It can be aborted by hitting the Stop button in the Scripting App.
+
+You should probably make sure you have a backup of your iPad or iPhone first; this script is working for me, but there is a chance if something goes wrong it could paste text over all your existing notes!
 
 # Future enhancements
 
