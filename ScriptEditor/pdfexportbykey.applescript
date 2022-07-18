@@ -210,3 +210,5 @@ console.log('tada')
 // Glitch - test beforehand if file exists?
 
 })()
+
+// code: language=JXA insertSpaces=false tabSize=4

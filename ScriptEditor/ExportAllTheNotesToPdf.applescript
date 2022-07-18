@@ -6,18 +6,21 @@ currentApp.includeStandardAdditions = true
 const Notes = Application('Notes')
 const SystemEvents = Application("System Events")
 
+// IMPORTANT: This is JXA, not AppleScript, so change the type in the ScriptEditor window (upper left)
+
 // WARNING
-// - do not try and use the mac for other stuff, less junk gets into the clipboard...
+// - do not try and use the mac for other stuff when this is running, less junk gets into the clipboard...
 
 // OK, in the output directory, we will
 // - recreate the folder hierarchy as directories
 // - generate a log, for debugging
 // - generate a metadata json log, for posterity. This will have one JSON object per line, the user can wrap it in [] later
 
-// Inspiration:
+// Inspiration includes at least the following:
 // https://jxa-examples.akjems.com
 // https://forum.keyboardmaestro.com/t/how-to-use-jxa-with-system-events-app/6341/3
 // https://eastmanreference.com/complete-list-of-applescript-key-codes
+// https://gist.github.com/JMichaelTX/807c87319ec5efa2f9970be9e4317288 (clipboard copy delay technique)
 
 const globals = { }
 const MAX_FOLDER_DEPTH = 16
@@ -67,7 +70,8 @@ function getContainerInfo(containerRef) {
 }
 
 const FileUtils = (function() {
-    return {
+	// Originally borrowed from https://forum.keyboardmaestro.com/t/why-do-we-code-jxa-scripts-using-closures/4739 and then improved
+	return {
 		sanitisePath(path) {
 			return path.replaceAll(/[:/&<>|\*\?\\\/"']/g, "_")
 		},
@@ -77,21 +81,21 @@ const FileUtils = (function() {
 			if (r.length < 2) return ""
 			return r.at(-1)
 		},
-        fileExists: function(path) {
-            const result = this.getFileOrFolderExists(path);
-            return result.exists && result.isFile;
-        },
-        getFileOrFolderExists: function(path) {
+		fileExists: function(path) {
+			const result = this.getFileOrFolderExists(path);
+			return result.exists && result.isFile;
+		},
+		getFileOrFolderExists: function(path) {
 			// console.log(`Check exists: ${path}`)
-            const isDirectory = Ref();
-            const exists = $.NSFileManager.defaultManager.fileExistsAtPathIsDirectory(path, isDirectory);
+			const isDirectory = Ref();
+			const exists = $.NSFileManager.defaultManager.fileExistsAtPathIsDirectory(path, isDirectory);
 			// console.log(`Check exists: ${path} --> ${exists}`)
-            return {
-                exists: exists,
-                isFile: isDirectory[0] !== 1
-            };
-        }
-    };
+			return {
+				exists: exists,
+				isFile: isDirectory[0] !== 1
+			};
+		}
+	};
 })();
 
 // Helper function to escape things that will go in shell single quote strings, that are not filenames
@@ -120,6 +124,7 @@ function safeCommandPress(sequence) {
 }
 
 // Such majestic hacks needed. sigh.
+// Inpsired by https://gist.github.com/JMichaelTX/807c87319ec5efa2f9970be9e4317288
 const CANARY = '[None][None][None][None][None][None]'
 
 function copyClipboard(setterFunction=null) {
@@ -300,3 +305,4 @@ trace(`Processed accounts=${globals.processed.accounts} folders=${globals.proces
 
 })()
 
+// code: language=JXA insertSpaces=false tabSize=4

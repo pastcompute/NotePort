@@ -76,3 +76,5 @@ if (n > MAX_FOLDER_DEPTH) {
 
 console.log(JSON.stringify(noteData, replacer, 2))
 })()
+
+// code: language=JXA insertSpaces=false tabSize=4

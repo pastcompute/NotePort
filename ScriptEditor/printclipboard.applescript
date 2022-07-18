@@ -18,3 +18,4 @@ const clipContents = currentApp.theClipboard()
 
 // After I copy a dragged item from Pages, it is a PDF
 // In fact, I can drag it to Finder and it becomes a PDF...
+// code: language=JXA insertSpaces=false tabSize=4

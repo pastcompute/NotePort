@@ -64,3 +64,5 @@ SystemEvents.keyDown(124)
 
 // const c = copyClipboard() ; console.log(c)
 })()
+
+// code: language=JXA insertSpaces=false tabSize=4

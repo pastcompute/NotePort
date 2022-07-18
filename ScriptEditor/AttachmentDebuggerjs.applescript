@@ -7,6 +7,8 @@ const documentsFolder = currentApp.pathTo("documents folder", {from: "user domai
 console.log(documentsFolder)
 const Notes = Application('Notes')
 
+// IMPORTANT: This is JXA, not AppleScript, so change the type in the ScriptEditor window (upper left)
+
 const selection = Notes.selection()
 const ns = selection.length
 
@@ -122,3 +124,5 @@ if (numAttachments > 0) {
 
 //    var sys = Application("System Events");
 //    var user_name = sys.currentUser().name();
+
+// code: language=JXA insertSpaces=false tabSize=4
