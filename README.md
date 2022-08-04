@@ -15,7 +15,10 @@ One day Apple will give Notes a proper API like the Calendar and other things se
 - Run the Script, choose a destination folder, wait.
 
 For best results, choose a new empty folder!
+## Password Protected Notes
 
+- first, unlock your notes
+- then in the script `ExportAllTheNotesToPdf`, near the top of the file set the constant `skipPasswordProtected` to `false`
 # WARNING
 
 Due to the way this sends keys and interacts with the clipboard, once the process starts, avoid using the computer to do anything else!

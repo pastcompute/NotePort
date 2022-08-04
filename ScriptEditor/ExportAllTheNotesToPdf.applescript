@@ -6,6 +6,8 @@ currentApp.includeStandardAdditions = true
 const Notes = Application('Notes')
 const SystemEvents = Application("System Events")
 
+const skipPasswordProtected = true
+
 // IMPORTANT: This is JXA, not AppleScript, so change the type in the ScriptEditor window (upper left)
 
 // WARNING
@@ -261,6 +263,10 @@ function enumerateAccounts() {
 					shared: noteRef.shared(),
 					attachmentCount: noteRef.attachments.length,
 					parents: [getContainerInfo(noteRef.container())],
+				}
+				if (noteData.passwordProtected && skipPasswordProtected) {
+					trace(`note: SKIP PASSWORD PROTECTED id=${noteId}, name=${noteName}`)
+					continue
 				}
 				let n = 1
 				for (; n < MAX_FOLDER_DEPTH; n++) {
