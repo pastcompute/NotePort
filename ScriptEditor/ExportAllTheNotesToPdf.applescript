@@ -6,7 +6,12 @@ currentApp.includeStandardAdditions = true
 const Notes = Application('Notes')
 const SystemEvents = Application("System Events")
 
-const skipPasswordProtected = true
+const skipPasswordProtected = false
+
+const menuDelay = 0.7
+const pasteDelay = 0.3
+const exportDelay = 0.15
+const clipCopyKeyDelay = 0.1
 
 // IMPORTANT: This is JXA, not AppleScript, so change the type in the ScriptEditor window (upper left)
 
@@ -27,6 +32,8 @@ const skipPasswordProtected = true
 const globals = { }
 const MAX_FOLDER_DEPTH = 16
 const KEY_ENTER = 36
+const KEY_RETURN = 76
+const KEY_TAB = 48
 const KEY_CMND = 55
 const KEY_SHIFT = 56
 const KEY_G = 5
@@ -138,12 +145,12 @@ function copyClipboard(setterFunction=null) {
 	delay(0.1)
 	if (!setterFunction) {
 		SystemEvents.keystroke('a', {using: 'command down'})
-		delay(0.1)
+		delay(clipCopyKeyDelay)
 		// Copy to clipboard
 		SystemEvents.keystroke('c', {using: 'command down'})
-		delay(0.1)
+		delay(clipCopyKeyDelay)
 	} else if (!setterFunction()) { return }	
-	const delay_s = 0.1
+	const delay_s = clipCopyKeyDelay
 	let ttl = 5.0 / delay_s // seconds --> interval
 	while (true) {
 		const clipContents = currentApp.theClipboard()
@@ -165,18 +172,32 @@ function exportPdfBySendingSystemEvents(oProcess, destDir, noteData) {
 	const fileMenu = oProcess.menuBars[0].menuBarItems.byName('File')
 	const exportMenu = fileMenu.menus[0].menuItems.byName('Export as PDF…')
 	exportMenu.click()
-	delay(0.6)
+	delay(menuDelay)
 	
 	// Copy whatever the current export suggested name is
-	const clipContents = copyClipboard()
-	if (!clipContents) throw "Invalid clipboard"
-	
+	var clipContents
+	try {
+		clipContents = copyClipboard()
+		if (!clipContents) throw "Invalid clipboard"
+		// throw "test"
+	} catch (e) {
+		// Probably because they re-locked
+		trace(`Clipboard failure on ${noteData.id}`)
+		trace(e)
+		globals.errorCount = globals.errorCount + 1
+		Notes.activate()
+		delay(exportDelay)
+		safeCommandPress([KEY_TAB])
+		delay(exportDelay)
+		safeCommandPress([KEY_RETURN])
+		return true
+	}
 	// Cmnd+Shift+g to expand the folder selector
 	safeCommandPress([KEY_CMND, KEY_SHIFT, KEY_G]) // command, shift, g
 
 	// Paste in the correct directory, then press ENTER
 	pasteClipboard(destDir)
-	delay(0.1)
+	delay(pasteDelay)
 	safeCommandPress([KEY_ENTER])
 	
 	// Now combine the suggested filename with the clipboard so we can test if it already exists...
@@ -199,12 +220,18 @@ function exportPdfBySendingSystemEvents(oProcess, destDir, noteData) {
 	}
 	noteData.actualFilename = filePathTry
 	if (paster) {
-		delay(0.1)
+		delay(pasteDelay)
 		pasteClipboard(paster)
+		delay(pasteDelay)
 	}
-	// And press ENTER to start export
-	delay(0.05)
-	safeCommandPress([KEY_ENTER])
+	delay(exportDelay)
+	// For some reason, KEY_ENTER has stopped working (at least, since I upgraded to Ventura, but I cannot prove this)
+	// It seems this new combination of activate then tab to the Save button is needed
+	Notes.activate()
+	delay(exportDelay)
+	safeCommandPress([KEY_TAB])
+	delay(exportDelay)
+	safeCommandPress([KEY_RETURN])
 	return true
 }
 
@@ -285,13 +312,14 @@ function enumerateAccounts() {
 				currentApp.doShellScript(`mkdir -p '${destDir}'`)
 
 				Notes.show(noteRef)
+				//const bailOut = false
 				const bailOut = !exportPdfBySendingSystemEvents(globals.oProcess, destDir, noteData)
 				recordMetadata(noteData)
 				if(bailOut) {
 					return
 				}
 				// uncomment lines here to only export one note, for testing; or play with the counter
-				// if (globals.processed.notesSeen > 1) return
+				// if (globals.processed.notesSeen >= 1) return
 				// return
 			}
 		}
@@ -322,8 +350,9 @@ try {
 // Seeing as we got this far, add the square brackets and commas to the JSON file to make it a proper JSON file
 currentApp.doShellScript(`sed -i '' -e '1s@^@[@' -e '2,$s@^@,@' -e '$s@$@]@' '${globals.metafile}'`)
 
-trace(`Processed accounts=${globals.processed.accounts} folders=${globals.processed.folders} notesSeen=${globals.processed.notesSeen}`)
+trace(`Processed accounts=${globals.processed.accounts} folders=${globals.processed.folders} notesSeen=${globals.processed.notesSeen} errors=${globals.errorCount}`)
 })()
 
 // code: language=JXA insertSpaces=false tabSize=4
+
 
